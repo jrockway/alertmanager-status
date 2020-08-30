@@ -86,6 +86,8 @@ type Watcher struct {
 
 	cancelCh chan struct{}
 	reqCh    chan HealthStatus
+
+	blockCh chan struct{} // Channel that will block the loop, for unit tests.
 }
 
 // NewWatcher creates a new watcher in the "unhealthy" state.  To mark the status as healthy, send
@@ -96,6 +98,7 @@ func NewWatcher(l *zap.Logger, name string, threshold time.Duration) *Watcher {
 		C:        make(chan HealthStatus),
 		cancelCh: make(chan struct{}),
 		reqCh:    make(chan HealthStatus),
+		blockCh:  make(chan struct{}),
 	}
 	l = l.Named(name)
 	hm := healthMetric.WithLabelValues(name)
@@ -121,6 +124,7 @@ func NewWatcher(l *zap.Logger, name string, threshold time.Duration) *Watcher {
 
 			case newHealth := <-w.C:
 				// An explicit status update.
+				l.Debug("health status updated", zap.Stringer("health", newHealth))
 				if health != newHealth {
 					l.Info("health status change", zap.Stringer("health", newHealth), zap.Time("last_healthy", lastHealthy))
 					health = newHealth
@@ -132,10 +136,10 @@ func NewWatcher(l *zap.Logger, name string, threshold time.Duration) *Watcher {
 				}
 
 			case <-ticker.C:
-				l.Debug("tick")
 				// A timer tick.  Though not strictly necessary, the timer continues
 				// to tick even when we're already unhealthy.  The code is simpler
 				// this way.
+				l.Debug("tick")
 				if health {
 					l.Info("health status change", zap.Stringer("health", Unhealthy), zap.Time("last_healthy", lastHealthy))
 				}
@@ -144,6 +148,10 @@ func NewWatcher(l *zap.Logger, name string, threshold time.Duration) *Watcher {
 			case w.reqCh <- health:
 				// A request to read the current health status.
 				l.Debug("sent current health status", zap.Stringer("health", health), zap.Time("last_healthy", lastHealthy))
+			case <-w.blockCh:
+				l.Info("blocking the event loop; you should never see this outside of tests")
+				<-w.blockCh
+				l.Info("unblocking the event loop")
 			}
 		}
 	}()

@@ -57,7 +57,7 @@ func TestHandleAlertmanagerPing(t *testing.T) {
 	testData := []struct {
 		name       string
 		request    interface{}
-		timeout    bool
+		block      bool
 		wantStatus int
 		wantHealth HealthStatus
 	}{
@@ -94,7 +94,7 @@ func TestHandleAlertmanagerPing(t *testing.T) {
 		{
 			name:       "broken watcher",
 			request:    &template.Data{Alerts: template.Alerts{template.Alert{Status: "ok"}}},
-			timeout:    true,
+			block:      true,
 			wantStatus: http.StatusInternalServerError,
 			wantHealth: Unhealthy,
 		},
@@ -131,14 +131,18 @@ func TestHandleAlertmanagerPing(t *testing.T) {
 				t.Fatalf("bad request %T(%v)", test.request, test.request)
 			}
 			req = req.WithContext(ctxzap.ToContext(context.Background(), l))
-			if test.timeout {
+			if test.block {
 				tctx, c := context.WithCancel(req.Context())
 				req = req.WithContext(tctx)
 				c()
+				w.blockCh <- struct{}{}
 			}
 			w.HandleAlertmanagerPing(rec, req)
 			if rec.Body.Len() > 0 {
 				t.Logf("response: %s", rec.Body.String())
+			}
+			if test.block {
+				w.blockCh <- struct{}{}
 			}
 			if got, want := rec.Code, test.wantStatus; got != want {
 				t.Errorf("hitting the webhook: status code:\n  got: %v\n want: %v", got, want)
@@ -153,7 +157,7 @@ func TestHandleAlertmanagerPing(t *testing.T) {
 func TestHandleHealthCheck(t *testing.T) {
 	testData := []struct {
 		name       string
-		timeout    bool
+		block      bool
 		health     HealthStatus
 		wantStatus int
 	}{
@@ -170,7 +174,7 @@ func TestHandleHealthCheck(t *testing.T) {
 		{
 			name:       "broken",
 			health:     Healthy,
-			timeout:    true,
+			block:      true,
 			wantStatus: http.StatusRequestTimeout,
 		},
 	}
@@ -180,7 +184,7 @@ func TestHandleHealthCheck(t *testing.T) {
 			l := zaptest.NewLogger(t, zaptest.Level(zapcore.InfoLevel))
 			w := NewWatcher(l, "TestHandleHealthCheck."+test.name, time.Second)
 			defer func() {
-				if !test.timeout {
+				if !test.block {
 					w.Stop()
 				}
 				for ok := true; ok; {
@@ -192,7 +196,7 @@ func TestHandleHealthCheck(t *testing.T) {
 			req := httptest.NewRequest("GET", "/", http.NoBody)
 			req = req.WithContext(ctxzap.ToContext(context.Background(), l))
 			w.C <- test.health
-			if test.timeout {
+			if test.block {
 				tctx, c := context.WithCancel(req.Context())
 				req = req.WithContext(tctx)
 				c()
@@ -226,7 +230,9 @@ func TestHandleLiveness(t *testing.T) {
 	ctx, c := context.WithCancel(ctxzap.ToContext(context.Background(), l))
 	req = req.WithContext(ctx)
 	c()
+	w.blockCh <- struct{}{}
 	w.HandleLiveness(rec, req)
+	w.blockCh <- struct{}{}
 	if got, want := rec.Code, http.StatusInternalServerError; got != want {
 		t.Errorf("expected non-live: status:\n  got: %v\n want: %v", got, want)
 	}
