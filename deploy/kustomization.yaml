@@ -1,0 +1,9 @@
+commonLabels:
+    app: alertmanager-status
+resources:
+    - deployment.yaml
+    - service.yaml
+images:
+    - name: alertmanager-status
+      newName: docker.io/jrockway/alertmanager-status
+      newTag: v0.0.0-922214fc93f5
