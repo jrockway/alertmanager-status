@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
     name: alertmanager-status
     annotations:
-        sidecar.jaegertracing.io/inject: "true"
+        sidecar.jaegertracing.io/inject: "jaeger"
 spec:
     replicas: 1
     template:
