@@ -1,0 +1,81 @@
+resource_types:
+    - name: file-url
+      type: registry-image
+      source:
+          repository: pivotalservices/concourse-curl-resource
+          tag: latest
+resources:
+    - name: source
+      type: git
+      icon: github-circle
+      source:
+          uri: https://github.com/jrockway/alertmanager-status
+    - name: golang
+      type: registry-image
+      icon: docker
+      source:
+          repository: golang
+          tag: 1.15
+    - name: container
+      type: registry-image
+      icon: docker
+      source:
+          repository: docker.io/jrockway/alertmanager-status
+          username: jrockway
+          password: ((dockerhub.token))
+    - name: codecov
+      type: file-url
+      source:
+          url: https://codecov.io/bash
+          filename: codecov.sh
+jobs:
+    - name: ci
+      public: true
+      plan:
+          - get: golang
+            trigger: true
+          - get: source
+            trigger: true
+          - get: codecov
+          - load_var: version
+            file: source/.git/ref
+          - task: test
+            image: golang
+            config:
+                platform: linux
+                inputs:
+                    - name: source
+                      path: alertmanager-status
+                    - name: codecov
+                      path: codecov
+                run:
+                    path: /bin/sh
+                    args:
+                        - -c
+                        - |
+                            cd alertmanager-status
+                            go test -v -race ./... -cover -coverprofile=coverage.txt -covermode=atomic
+                            out=$?
+                            bash ../codecov/codecov.sh
+                            return $out
+          - task: build
+            privileged: true
+            config:
+                platform: linux
+                image_resource:
+                    type: registry-image
+                    source:
+                        repository: vito/oci-build-task
+                params:
+                    CONTEXT: source
+                    BUILD_ARG_version: ((.:version))
+                inputs:
+                    - name: source
+                outputs:
+                    - name: image
+                run:
+                    path: build
+          - put: container
+            params:
+                image: image/image.tar
+                additional_tags: source/.git/ref
