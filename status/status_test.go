@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
@@ -56,7 +57,7 @@ func TestHandleAlertmanagerPing(t *testing.T) {
 	testData := []struct {
 		name       string
 		request    interface{}
-		timeout    time.Duration
+		timeout    bool
 		wantStatus int
 		wantHealth HealthStatus
 	}{
@@ -93,7 +94,7 @@ func TestHandleAlertmanagerPing(t *testing.T) {
 		{
 			name:       "broken watcher",
 			request:    &template.Data{Alerts: template.Alerts{template.Alert{Status: "ok"}}},
-			timeout:    time.Nanosecond,
+			timeout:    true,
 			wantStatus: http.StatusInternalServerError,
 			wantHealth: Unhealthy,
 		},
@@ -129,10 +130,11 @@ func TestHandleAlertmanagerPing(t *testing.T) {
 			default:
 				t.Fatalf("bad request %T(%v)", test.request, test.request)
 			}
-			if test.timeout > 0 {
-				tctx, c := context.WithTimeout(req.Context(), test.timeout)
+			req = req.WithContext(ctxzap.ToContext(context.Background(), l))
+			if test.timeout {
+				tctx, c := context.WithCancel(req.Context())
 				req = req.WithContext(tctx)
-				defer c()
+				c()
 			}
 			w.HandleAlertmanagerPing(rec, req)
 			if rec.Body.Len() > 0 {
@@ -143,6 +145,65 @@ func TestHandleAlertmanagerPing(t *testing.T) {
 			}
 			if got, want := <-w.reqCh, test.wantHealth; got != want {
 				t.Errorf("after valid alertmanager ping:\n  got: %s\n want: %v", got, want)
+			}
+		})
+	}
+}
+
+func TestHandleHealthCheck(t *testing.T) {
+	testData := []struct {
+		name       string
+		timeout    bool
+		health     HealthStatus
+		wantStatus int
+	}{
+		{
+			name:       "unhealthy",
+			health:     Unhealthy,
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:       "healthy",
+			health:     Healthy,
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "broken",
+			health:     Healthy,
+			timeout:    true,
+			wantStatus: http.StatusRequestTimeout,
+		},
+	}
+
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			l := zaptest.NewLogger(t, zaptest.Level(zapcore.InfoLevel))
+			w := NewWatcher(l, "TestHandleHealthCheck."+test.name, time.Second)
+			defer func() {
+				if !test.timeout {
+					w.Stop()
+				}
+				for ok := true; ok; {
+					_, ok = <-w.reqCh
+				}
+			}()
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/", http.NoBody)
+			req = req.WithContext(ctxzap.ToContext(context.Background(), l))
+			w.C <- test.health
+			if test.timeout {
+				tctx, c := context.WithCancel(req.Context())
+				req = req.WithContext(tctx)
+				c()
+				w.Stop()
+			}
+			w.HandleHealthCheck(rec, req)
+			if rec.Body.Len() > 0 {
+				t.Logf("response: %s", rec.Body.String())
+			}
+			if got, want := rec.Code, test.wantStatus; got != want {
+				t.Errorf("hitting the webhook: status code:\n  got: %v\n want: %v", got, want)
 			}
 		})
 	}

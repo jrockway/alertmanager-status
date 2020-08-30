@@ -23,6 +23,7 @@ func main() {
 	server.Setup()
 
 	w := status.NewWatcher(zap.L().Named("watcher"), "alertmanager", cfg.Threshold)
+	mux.HandleFunc("/", w.HandleHealthCheck)
 	mux.HandleFunc("/webhook", w.HandleAlertmanagerPing)
 	server.AddDrainHandler(func() { w.Stop() })
 

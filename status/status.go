@@ -30,6 +30,14 @@ var (
 		},
 		[]string{"name"},
 	)
+
+	lastHealthCheckedMetric = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "alertmanager_status_last_health_checked",
+			Help: "When we last received a health check attempt; use this to monitor your third-party monitoring service.",
+		},
+		[]string{"name"},
+	)
 )
 
 type HealthStatus bool
@@ -53,6 +61,11 @@ func (h HealthStatus) AsFloat64() float64 {
 	return 0.0
 }
 
+const (
+	// How long to wait on internal operations.
+	internalTimeout = 5 * time.Second
+)
+
 // Watcher watches for Alertmanager checkins, logs information when the health status changes, and
 // serves an HTTP status page with information about the current state.
 //
@@ -67,7 +80,8 @@ func (h HealthStatus) AsFloat64() float64 {
 // that we start serving an "unhealthy" status.  The code would be much simpler if we just
 // subtracted the last healthy time from the current time when someone asked for the status.
 type Watcher struct {
-	C chan HealthStatus // Writing a health status to C allows you to mark the watcher as healthy or unhealthy.
+	Name string
+	C    chan HealthStatus // Writing a health status to C allows you to mark the watcher as healthy or unhealthy.
 
 	cancelCh chan struct{}
 	reqCh    chan HealthStatus
@@ -77,6 +91,7 @@ type Watcher struct {
 // Healthy to watcher.C.
 func NewWatcher(l *zap.Logger, name string, threshold time.Duration) *Watcher {
 	w := &Watcher{
+		Name:     name,
 		C:        make(chan HealthStatus),
 		cancelCh: make(chan struct{}),
 		reqCh:    make(chan HealthStatus),
@@ -174,7 +189,7 @@ func (w *Watcher) HandleAlertmanagerPing(wr http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	tctx, c := context.WithTimeout(ctx, 5*time.Second)
+	tctx, c := context.WithTimeout(ctx, internalTimeout)
 	defer c()
 	select {
 	case w.C <- Healthy:
@@ -185,4 +200,36 @@ func (w *Watcher) HandleAlertmanagerPing(wr http.ResponseWriter, req *http.Reque
 		l.Error("problem informing watcher of health status", zap.Error(tctx.Err()))
 	}
 	http.Error(wr, "problem informing watcher of health status", http.StatusInternalServerError)
+}
+
+// HandleHealthCheck is an http.HandlerFunc that accepts HTTP requests from an external "website
+// monitoring" service, and returns a 200 status code if Alertmanager is healthy, or a 500 Internal
+// Server Error code if Alertmanager is unhealthy.  We choose 500 because it is most likely to be
+// treated as an error by your health-checking service, even though it is technically incorrect.
+//
+// This endpoint is NOT intended to be a liveness/readiness/health probe for the alertmanager-status
+// service itself!
+func (w *Watcher) HandleHealthCheck(wr http.ResponseWriter, req *http.Request) {
+	lastHealthCheckedMetric.WithLabelValues(w.Name).SetToCurrentTime()
+	ctx := req.Context()
+	l := ctxzap.Extract(ctx).With(zap.String("remote_addr", req.RemoteAddr))
+	ctx, c := context.WithTimeout(ctx, internalTimeout)
+	defer c()
+	var health HealthStatus
+	select {
+	case <-ctx.Done():
+		l.Error("problem reading health status", zap.Error(ctx.Err()))
+		http.Error(wr, "problem reading health status: "+ctx.Err().Error(), http.StatusRequestTimeout)
+		return
+	case health = <-w.reqCh:
+	}
+	wr.Header().Add("content-type", "text/plain; charset=utf-8")
+	if health {
+		wr.WriteHeader(http.StatusOK)
+		wr.Write([]byte(w.Name + " ok")) // nolint:errcheck
+		return
+	}
+	l.Info("serving 'unhealthy' to external health checker")
+	wr.WriteHeader(http.StatusInternalServerError)
+	wr.Write([]byte(w.Name + " unhealthy")) // nolint:errcheck
 }
