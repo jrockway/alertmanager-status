@@ -48,6 +48,8 @@ jobs:
                       path: alertmanager-status
                     - name: codecov
                       path: codecov
+                params:
+                    CODECOV_TOKEN: ((alertmanager-status.codecov))
                 run:
                     path: /bin/sh
                     args:
