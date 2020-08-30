@@ -23,9 +23,9 @@ func main() {
 	server.Setup()
 
 	w := status.NewWatcher(zap.L().Named("watcher"), "alertmanager", cfg.Threshold)
-	http.HandleFunc("/livez", w.HandleLiveness) // note that this is on the debug port
-	mux.HandleFunc("/", w.HandleHealthCheck)
-	mux.HandleFunc("/webhook", w.HandleAlertmanagerPing)
+	http.HandleFunc("/livez", w.HandleLiveness)           // internal
+	http.HandleFunc("/webhook", w.HandleAlertmanagerPing) // internal
+	mux.HandleFunc("/", w.HandleHealthCheck)              // public
 	server.AddDrainHandler(func() { w.Stop() })
 
 	server.ListenAndServe()
