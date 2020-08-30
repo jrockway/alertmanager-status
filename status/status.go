@@ -3,6 +3,7 @@ package status
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -232,4 +233,32 @@ func (w *Watcher) HandleHealthCheck(wr http.ResponseWriter, req *http.Request) {
 	l.Info("serving 'unhealthy' to external health checker")
 	wr.WriteHeader(http.StatusInternalServerError)
 	wr.Write([]byte(w.Name + " unhealthy")) // nolint:errcheck
+}
+
+// HandleLiveness is an http.HandlerFunc that returns status 200 if the event loop is not locked up.
+// This works as a liveness probe and a readiness probe.
+func (w *Watcher) HandleLiveness(wr http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	l := ctxzap.Extract(ctx).With(zap.String("remote_addr", req.RemoteAddr))
+	ctx, c := context.WithTimeout(ctx, internalTimeout)
+	defer c()
+	var err error
+	select {
+	case <-ctx.Done():
+		err = ctx.Err()
+	case _, ok := <-w.reqCh:
+		if !ok {
+			err = errors.New("event loop is shutdown")
+		}
+	}
+
+	if err != nil {
+		l.Error("liveness check failed", zap.Error(err))
+		http.Error(wr, "liveness check: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	wr.Header().Add("content-type", "text/plain; charset=utf-8")
+	wr.WriteHeader(http.StatusOK)
+	wr.Write([]byte("live")) // nolint:errcheck
 }

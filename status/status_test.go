@@ -208,3 +208,38 @@ func TestHandleHealthCheck(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleLiveness(t *testing.T) {
+	l := zaptest.NewLogger(t, zaptest.Level(zapcore.InfoLevel))
+	w := NewWatcher(l, "TestHandleLiveness", time.Second)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	req = req.WithContext(ctxzap.ToContext(context.Background(), l))
+	w.HandleLiveness(rec, req)
+	if got, want := rec.Code, http.StatusOK; got != want {
+		t.Errorf("expected live: status:\n  got: %v\n want: %v", got, want)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/", http.NoBody)
+	ctx, c := context.WithCancel(ctxzap.ToContext(context.Background(), l))
+	req = req.WithContext(ctx)
+	c()
+	w.HandleLiveness(rec, req)
+	if got, want := rec.Code, http.StatusInternalServerError; got != want {
+		t.Errorf("expected non-live: status:\n  got: %v\n want: %v", got, want)
+	}
+	w.Stop()
+	for ok := true; ok; {
+		_, ok = <-w.reqCh
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/", http.NoBody)
+	req = req.WithContext(ctxzap.ToContext(context.Background(), l))
+	w.HandleLiveness(rec, req)
+	if got, want := rec.Code, http.StatusInternalServerError; got != want {
+		t.Errorf("expected non-live after shutdown: status:\n  got: %v\n want: %v", got, want)
+	}
+}
