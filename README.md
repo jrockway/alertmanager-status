@@ -1,5 +1,9 @@
 # alertmanager-status
 
+![CI](https://ci.jrock.us/api/v1/teams/main/pipelines/alertmanager-status/jobs/ci/badge)
+[![codecov](https://codecov.io/gh/jrockway/alertmanager-status/branch/master/graph/badge.svg)](https://codecov.io/gh/jrockway/alertmanager-status)
+[![](https://images.microbadger.com/badges/version/jrockway/alertmanager-status.svg)](https://microbadger.com/images/jrockway/alertmanager-status)
+
 ## Quick start
 
 `alertmanger-status` is an
@@ -11,26 +15,18 @@ To do this, you'll need an alert that is always firing. Many people have this al
 one that I found laying around on the Internet:
 
 ```yaml
-apiVersion: monitoring.coreos.com/v1
-kind: PrometheusRule
-metadata:
-    labels:
-        role: alert-rules
-    name: self-check-alerts
-spec:
-    groups:
-        - name: Watchdog
-          rules:
-              - alert: AlwaysFiring
-                expr: vector(1)
-                for: 1s
-                labels:
-                    severity: none
-                annotations:
-                    summary: "AlwaysFiring"
-                    description: |
-                        This is an alert meant to ensure that the entire alerting pipeline is functional.
-                        This alert is always firing, therefore it should always be firing in Alertmanager.
+- name: Watchdog
+  rules:
+      - alert: AlwaysFiring
+        expr: vector(1)
+        for: 1s
+        labels:
+            severity: none
+        annotations:
+            summary: "AlwaysFiring"
+            description: |
+                This is an alert meant to ensure that the entire alerting pipeline is functional.
+                This alert is always firing, therefore it should always be firing in Alertmanager.
 ```
 
 Next, you'll need to [install](#Installation) `alertmanager-status` and tell Alertmanager to send
