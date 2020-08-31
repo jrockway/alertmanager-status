@@ -81,7 +81,7 @@ your site-specific configuration in a `kustomization.yaml` file that looks like:
 ```yaml
 namespace: monitoring
 bases:
-    - github.com/jrockway/alertmanager-status/deploy?ref=v0.0.2
+    - github.com/jrockway/alertmanager-status/deploy?ref=v0.0.3
 ```
 
 and `kubectl apply -k .` to the directory you put that file in. The release names on Github are tags

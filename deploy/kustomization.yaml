@@ -6,4 +6,4 @@ resources:
 images:
     - name: alertmanager-status
       newName: docker.io/jrockway/alertmanager-status
-      newTag: v0.0.2
+      newTag: v0.0.3
