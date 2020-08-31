@@ -81,11 +81,11 @@ your site-specific configuration in a `kustomization.yaml` file that looks like:
 ```yaml
 namespace: monitoring
 bases:
-    - github.com/jrockway/alertmanager-status/deploy?ref=7a5c31fb9baaefe078f145a0c864f21d0c9014fc
+    - github.com/jrockway/alertmanager-status/deploy?ref=v0.0.2
 ```
 
-and `kubectl apply -k .` to the directory you put that file in. You can also use `?ref=<tag>`; the
-release names on Github are tags that you can use.
+and `kubectl apply -k .` to the directory you put that file in. The release names on Github are tags
+that you can use in the `?ref=...` directive.
 
 You will need to add your own Ingress configuration if you want one. Create the manifest and add it
 to your `kustomization.yaml` by adding a `resources` section that refers to it.
