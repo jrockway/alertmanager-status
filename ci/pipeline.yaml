@@ -10,6 +10,8 @@ resources:
       icon: github-circle
       source:
           uri: https://github.com/jrockway/alertmanager-status
+          fetch_tags: true
+          describe_ref_options: --always --dirty --broken --tags
     - name: golang
       type: registry-image
       icon: docker
@@ -38,7 +40,7 @@ jobs:
             trigger: true
           - get: codecov
           - load_var: version
-            file: source/.git/ref
+            file: source/.git/describe_ref
           - task: test
             image: golang
             config:
@@ -80,4 +82,4 @@ jobs:
           - put: container
             params:
                 image: image/image.tar
-                additional_tags: source/.git/ref
+                additional_tags: source/.git/describe_ref
