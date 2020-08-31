@@ -184,9 +184,7 @@ func TestHandleHealthCheck(t *testing.T) {
 			l := zaptest.NewLogger(t, zaptest.Level(zapcore.InfoLevel))
 			w := NewWatcher(l, "TestHandleHealthCheck."+test.name, time.Second)
 			defer func() {
-				if !test.block {
-					w.Stop()
-				}
+				w.Stop()
 				for ok := true; ok; {
 					_, ok = <-w.reqCh
 				}
@@ -200,9 +198,12 @@ func TestHandleHealthCheck(t *testing.T) {
 				tctx, c := context.WithCancel(req.Context())
 				req = req.WithContext(tctx)
 				c()
-				w.Stop()
+				w.blockCh <- struct{}{}
 			}
 			w.HandleHealthCheck(rec, req)
+			if test.block {
+				w.blockCh <- struct{}{}
+			}
 			if rec.Body.Len() > 0 {
 				t.Logf("response: %s", rec.Body.String())
 			}
