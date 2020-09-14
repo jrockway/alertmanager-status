@@ -41,6 +41,10 @@ var (
 	)
 )
 
+func init() {
+	prometheus.MustRegister(healthMetric, lastHealthyMetric, lastHealthCheckedMetric)
+}
+
 type HealthStatus bool
 
 const (
