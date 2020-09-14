@@ -136,7 +136,7 @@ func NewWatcher(l *zap.Logger, name string, threshold time.Duration) *Watcher {
 				if health == Healthy {
 					ticker.Reset(threshold)
 					lastHealthy = time.Now()
-					lastHealthyMetric.With(prometheus.Labels{"name": "name"}).SetToCurrentTime()
+					lhm.SetToCurrentTime()
 				}
 
 			case <-ticker.C:
