@@ -13,7 +13,7 @@ spec:
                   image: alertmanager-status
                   env:
                       - name: GOMAXPROCS
-                        value: 1
+                        value: "1"
                       - name: DEBUG_ADDRESS
                         value: 0.0.0.0:8081
                       - name: LOG_LEVEL
