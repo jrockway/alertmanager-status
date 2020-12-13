@@ -12,6 +12,8 @@ spec:
                 - name: alertmanager-status
                   image: alertmanager-status
                   env:
+                      - name: GOMAXPROCS
+                        value: 1
                       - name: DEBUG_ADDRESS
                         value: 0.0.0.0:8081
                       - name: LOG_LEVEL
@@ -40,5 +42,4 @@ spec:
                           cpu: 10m
                           memory: 45Mi
                       limits:
-                          cpu: 1
                           memory: 45Mi
