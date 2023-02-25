@@ -9,5 +9,5 @@ require (
 	github.com/prometheus/client_golang v1.13.0
 	github.com/stretchr/objx v0.2.0 // indirect
 	go.uber.org/zap v1.19.1
-	golang.org/x/net v0.0.0-20220909164309-bea034e7d591 // indirect
+	golang.org/x/net v0.7.0 // indirect
 )
